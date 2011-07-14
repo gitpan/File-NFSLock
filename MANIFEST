@@ -18,3 +18,4 @@ t/300_bl_sh.t
 t/400_kill.t
 t/410_die.t
 t/420_crash.t
+META.yml                                 Module meta-data (added by MakeMaker)
