@@ -32,7 +32,7 @@ our $errstr;
 use base 'Exporter';
 our @EXPORT_OK = qw(uncache);
 
-our $VERSION = '1.22';
+our $VERSION = '1.23';
 
 #Get constants, but without the bloat of
 #use Fcntl qw(LOCK_SH LOCK_EX LOCK_NB);
@@ -63,7 +63,7 @@ my $graceful_sig = sub {
   print STDERR "Received SIG$_[0]\n" if @_;
   # Perl's exit should safely DESTROY any objects
   # still "alive" before calling the real _exit().
-  exit;
+  exit 1;
 };
 
 our @CATCH_SIGS = qw(TERM INT);
@@ -172,7 +172,7 @@ sub new {
       my $try_lock_exclusive = !($self->{lock_type} & LOCK_SH);
 
       while(defined(my $line=<$fh>)){
-        if ($line =~ /^$HOSTNAME (-?\d+) /) {
+        if ($line =~ /^\Q$HOSTNAME\E (-?\d+) /) {
           my $pid = $1;
           if ($pid == $$) {       # This is me.
             push @mine, $line;
@@ -202,7 +202,7 @@ sub new {
         seek ($fh, 0, 0);
         my $content = '';
         while(defined(my $line=<$fh>)){
-          if ($line =~ /^$HOSTNAME (-?\d+) /) {
+          if ($line =~ /^\Q$HOSTNAME\E (-?\d+) /) {
             my $pid = $1;
             next if (!kill 0, $pid);  # Skip dead locks from this host
           }
@@ -273,9 +273,9 @@ sub unlock ($) {
   if (!$self->{unlocked}) {
     unlink( $self->{rand_file} ) if -e $self->{rand_file};
     if( $self->{lock_type} & LOCK_SH ){
-      return $self->do_unlock_shared;
+      $self->do_unlock_shared;
     }else{
-      return $self->do_unlock;
+      $self->do_unlock;
     }
     $self->{unlocked} = 1;
     foreach my $signal (@CATCH_SIGS) {
