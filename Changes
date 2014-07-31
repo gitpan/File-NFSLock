@@ -1,11 +1,15 @@
 Revision history for Perl extension File::NFSLock.
 
+1.24  Jul 30 14:00 2014
+        - Fixed a race condition in crash recovery.
+        - RT#88520 Thanks David Steinbrunner: Fix typos
+
 1.23  Jul 28 11:00 2014
         - More gracefully handle arbitrary hostnames.
         - Patch RT#84658 by Yann Rouillard:
         - Avoid gleefully double removing valid lockfile
           when ->unlock is explicitly called.
-        - Patch RT# by cpan at danonline.net:
+        - Patch RT#61258 by cpan at danonline.net:
         - Fixed $graceful_sig to exit with non-zero to
           more closely match stock signal handlers.
 
