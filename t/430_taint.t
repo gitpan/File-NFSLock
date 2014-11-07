@@ -1,10 +1,12 @@
-# Lock Test with fatal error (die)
+#!/usr/bin/perl -T -w
+
+# Lock Test with abnormal or abrupt termination (System crash or SIGKILL) with Taint
 
 use strict;
 use warnings;
 use File::Temp qw(tempfile);
 
-use Test::More tests => 9;
+use Test::More tests => 10;
 use File::NFSLock;
 use Fcntl qw(O_CREAT O_RDWR O_RDONLY O_TRUNC LOCK_EX);
 
@@ -34,18 +36,18 @@ if (!$pid) {
     file => $datafile,
     lock_type => LOCK_EX,
   };
+  open(STDERR,">/dev/null");
   print $wr1 !!$lock; # Send boolean success status down pipe
   close($wr1); # Signal to parent that the Blocking lock is done
-  close($wr1);
+  close($rd1);
   if ($lock) {
+    sleep 10;  # hold the lock for a moment
     sysopen(my $fh, $datafile, O_RDWR | O_TRUNC);
     # And then put a magic word into the file
     print $fh "exclusive\n";
     close $fh;
-    open(STDERR,">/dev/null");
-    die "I will die while lock is still acquired";
   }
-  die "Lock failed!";
+  exit;
 }
 
 # test 3
@@ -59,11 +61,15 @@ close ($rd1);
 # test 4
 ok ($child1_lock);
 
-# Clear the zombie
+# Pretend like the box crashed rudely while the lock is acquired
 # test 5
+ok (kill "KILL", $pid);
+
+# Clear the zombie
+# test 6
 ok (wait);
 
-# test 6
+# test 7
 my ($rd2, $wr2);
 ok (pipe($rd2, $wr2)); # Connected pipe for child2
 if (!fork) {
@@ -85,7 +91,7 @@ if (!fork) {
   close($rd2);
   exit; # Release this new lock
 }
-# test 7
+# test 8
 ok 1; # Fork successful
 close ($wr2);
 
@@ -94,14 +100,14 @@ my $child2_lock = <$rd2>;
 close ($rd2);
 # Report status of the child2_lock.
 # This should have been successful.
-# test 8
+# test 9
 ok ($child2_lock);
 
 # Load up whatever the file says now
 sysopen(my $fh2, $datafile, O_RDONLY);
 
 $_ = <$fh2>;
-# test 9
+# test 10
 ok /lock2/;
 close $fh2;
 

@@ -1,4 +1,6 @@
-# Blocking Exclusive test within a single process (no fork)
+#!/usr/bin/perl -T -w
+
+# Blocking Exclusive test within a single process with Taint enabled
 
 use Test::More tests => 2;
 use File::NFSLock;
