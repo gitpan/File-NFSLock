@@ -32,7 +32,7 @@ our $errstr;
 use base 'Exporter';
 our @EXPORT_OK = qw(uncache);
 
-our $VERSION = '1.25';
+our $VERSION = '1.26';
 
 #Get constants, but without the bloat of
 #use Fcntl qw(LOCK_SH LOCK_EX LOCK_NB);
@@ -456,31 +456,60 @@ sub newpid {
       select(undef,undef,undef,0.1);
     }
 
-    # Fake the parent into thinking it is already
-    # unlocked because the child will take care of it.
-    $self->{unlocked} = 1;
+    # Child finished running newpid() and acquired shared lock
+    # So now we're safe to continue without risk of
+    # blowing away the lock prematurely.
+    unless ( $self->{lock_type} & LOCK_SH ) {
+      # If it's not already a SHared lock, then
+      # just switch it from EXclusive to SHared
+      # from this process's point of view.
+      # Then the child will still hold the lock
+      # if the parent releases it first.
+      # (Don't chmod the lock file.)
+      $self->{lock_type} |= LOCK_SH;
+    }
   } else {
     # This is the new child
 
-    # The lock_line found in the lock_file contents
-    # must be modified to reflect the new pid.
-
     # Fix lock_pid to the new pid.
     $self->{lock_pid} = $$;
-    # Backup the old lock_line.
-    my $old_line = $self->{lock_line};
+
+    # We can leave the old lock_line in the lock_file
+    # But we need to add the new lock_line for this pid.
+
     # Clear lock_line to create a fresh one.
     delete $self->{lock_line};
     # Append a new lock_line to the lock_file.
     $self->create_magic($self->{lock_file});
-    # Remove the old lock_line from lock_file.
-    local $self->{lock_line} = $old_line;
-    $self->do_unlock_shared;
+
+    unless ( $self->{lock_type} & LOCK_SH ) {
+      # If it's not already a SHared lock, then
+      # just switch it from EXclusive to SHared
+      # from this process's point of view.
+      # Then the parent will still hold the lock
+      # if this child releases it first.
+      # (Don't chmod the lock file.)
+      $self->{lock_type} |= LOCK_SH;
+    }
+
     # Create signal file to notify parent that
     # the lock_line entry has been delegated.
     open (my $fh, '>', "$self->{lock_file}.fork");
     close($fh);
   }
+}
+
+sub fork {
+  my $self = shift;
+  # Store fork response.
+  my $pid = CORE::fork();
+  if (defined $pid and !$self->{unlocked}) {
+    # Fork worked and we really have a lock to deal with
+    # So upgrade to shared lock across both parent and child
+    $self->newpid;
+  }
+  # Return original fork response
+  return $pid;
 }
 
 1;
@@ -653,29 +682,45 @@ the new constructor on the file that the lock is
 being attempted.  uncache may be used as either an
 object method or as a stand alone subroutine.
 
+=head2 fork
+
+  my $pid = $lock->fork;
+  if (!defined $pid) {
+    # Fork Failed
+  } elsif ($pid) {
+    # Parent ...
+  } else {
+    # Child ...
+  }
+
+fork() is a convenience method that acts just like the normal
+CORE::fork() except it safely ensures the lock is retained
+within both parent and child processes. WITHOUT this, then when
+either the parent or child process releases the lock, then the
+entire lock will be lost, allowing external processes to
+re-acquire a lock on the same file, even if the other process
+still has the lock object in scope. This can cause corruption
+since both processes might think they have exclusive access to
+the file.
+
 =head2 newpid
 
   my $pid = fork;
-  if (defined $pid) {
+  if (!defined $pid) {
     # Fork Failed
   } elsif ($pid) {
-    $lock->newpid; # Parent
+    $lock->newpid;
+    # Parent ...
   } else {
-    $lock->newpid; # Child
+    $lock->newpid;
+    # Child ...
   }
 
-If fork() is called after a lock has been acquired,
-then when the lock object leaves scope in either
-the parent or child, it will be released.  This
-behavior may be inappropriate for your application.
-To ensure both processes maintain ownership of the
-lock, both the parent and child process must call
-the newpid() method after a successful fork() call.
-This will prevent the parent from releasing the
-child's lock when unlock is called or when
-the lock object leaves scope.  This is also
-useful to allow the parent to fail on subsequent
-lock attempts if the child lock is still acquired.
+The newpid() synopsis shown above is equivalent to the
+one used for the fork() method, but it's not intended
+to be called directly. It is called internally by the
+fork() method. To be safe, it is recommended to use
+$lock->fork() from now on.
 
 =head1 FAILURE
 
