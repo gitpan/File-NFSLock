@@ -1,7 +1,8 @@
-# Shared Fork Test
+# Exclusive Fork Test
 #
 # This tests the capabilities of fork after lock to
-# ensure parent retains shared lock even if child releases it.
+# ensure parent retains exclusive lock even if child releases it.
+# This test uses ->fork() instead of ->newpid()
 
 use strict;
 use warnings;
@@ -28,12 +29,12 @@ pipe(my $dad_rd, my $dad_wr);
   # Forced dummy scope
   my $lock1 = new File::NFSLock {
     file => $datafile,
-    lock_type => LOCK_SH,
+    lock_type => LOCK_EX,
   };
 
   ok ($lock1);
 
-  my $pid = fork;
+  my $pid = $lock1->fork;
   if (!defined $pid) {
     die "fork failed!";
   } elsif (!$pid) {
@@ -45,19 +46,9 @@ pipe(my $dad_rd, my $dad_wr);
     # Let go of the other side $dad_rd
     close $dad_wr;
 
-    # Test possible race condition
-    # by making parent reach newpid()
-    # and attempt relock before child
-    # even calls newpid() the first time.
-    sleep 2;
-    $lock1->newpid;
-
     # Child continues on while parent holds onto the lock...
   } else {
     # Parent process
-
-    # Notify lock that we've forked.
-    $lock1->newpid;
 
     # Parent hangs onto the lock for a bit
     sleep 5;
@@ -91,7 +82,7 @@ pipe(my $dad_rd, my $dad_wr);
     lock_type => LOCK_EX|LOCK_NB,
   };
 
-  ok (!$lock2);
+  ok(!$lock2);
 }
 
 # Wait for the parent process to release the lock

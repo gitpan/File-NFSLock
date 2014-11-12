@@ -2,6 +2,7 @@
 #
 # This tests the capabilities of fork after lock to
 # ensure parent retains shared lock even if child releases it.
+# This test uses ->fork() instead of ->newpid()
 
 use strict;
 use warnings;
@@ -33,7 +34,7 @@ pipe(my $dad_rd, my $dad_wr);
 
   ok ($lock1);
 
-  my $pid = fork;
+  my $pid = $lock1->fork;
   if (!defined $pid) {
     die "fork failed!";
   } elsif (!$pid) {
@@ -45,19 +46,9 @@ pipe(my $dad_rd, my $dad_wr);
     # Let go of the other side $dad_rd
     close $dad_wr;
 
-    # Test possible race condition
-    # by making parent reach newpid()
-    # and attempt relock before child
-    # even calls newpid() the first time.
-    sleep 2;
-    $lock1->newpid;
-
     # Child continues on while parent holds onto the lock...
   } else {
     # Parent process
-
-    # Notify lock that we've forked.
-    $lock1->newpid;
 
     # Parent hangs onto the lock for a bit
     sleep 5;

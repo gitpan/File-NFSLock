@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               File-NFSLock
-version:            1.26
+version:            1.27
 abstract:           perl module to do NFS (or not) locking
 author:
     - Paul Seamons
